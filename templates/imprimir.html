@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang='pt-BR'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Impressão</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script>
+        // Esta função será chamada assim que a página carregar
+        window.onload = function() {
+            window.print(); // Abre a caixa de diálogo de impressão do navegador
+        };
+    </script>
+</head>
+<body class="print-page">
+    {{ conteudo_html | safe }}
+    <footer>
+        <div  class="footer-faixa">
+            <div">
+                <p>Notus Sistemas Térmicos Do Brasil © Todos os direitos reservados</p>
+            </div>
+            <div class="faixa-amarela">
+            </div>
+            <div class="faixa-verde">
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

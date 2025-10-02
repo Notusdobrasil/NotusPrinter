@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Detalhes do Pedido</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <div  class="header-faixa">
+            <img src="{{ url_for('static', filename='logo-notus-branco.png') }}" alt="Logo">
+        </div>
+    </header>
+    <div id="conteudo-principal" class="container">
+        <div class="header">
+            <div>
+                {% if arquivo.status == 'novo' %}
+                    <a href="{{ url_for('marcar_como_impresso', arquivo_id=arquivo.id) }}" class="btn btn-print">Imprimir</a>
+                {% elif arquivo.status == 'impresso' %}
+                    <button class="btn" disabled>Já Impresso</button>
+                {% elif arquivo.status == 'duplicado' %}
+                    <button class="btn btn-warning" onclick="abrirModalDuplicado('{{ (etiquetas[0]).numero_pedido }}', {{ arquivo.id }})">Impressão Bloqueada (Duplicado)</button>
+                {% endif %}
+            </div>
+        </div>
+        <hr>
+        <div class="info-arquivo">
+            <p><strong>Arquivo:</strong> {{ arquivo.nome_arquivo }}</p>
+            <p><strong>Data de Processamento:</strong> {{ arquivo.data_processamento }}</p>
+            <p><strong>Total de Etiquetas:</strong> {{ arquivo.total_etiquetas }}</p>
+        </div>
+        <hr>
+        <h2>Etiquetas contidas neste pedido:</h2>
+        <div class="etiquetas-grid">
+            {% for etiqueta in etiquetas %}
+                <div class="etiqueta-container">
+                    <h4>Etiqueta (Volume {{ etiqueta.volume_atual }} de {{ etiqueta.volume_total }})</h4>
+                    <p><strong>Código do Produto:</strong> {{ etiqueta.ref_numero }}</p>
+                    <p><strong>Pedido:</strong> {{ etiqueta.numero_pedido }} ({{ etiqueta.data_pedido }})</p>
+                    <p><strong>Nota Fiscal (NF):</strong> {{ etiqueta.numero_nf }}</p>
+                    <hr>
+                    <p><strong>Destinatário:</strong> {{ etiqueta.nome_destinatario }}</p>
+                    <p><strong>Endereço:</strong> {{ etiqueta.endereco_destinatario }}</p>
+                    <p><strong>Cidade/UF:</strong> {{ etiqueta.cidade_destinatario }} - {{ etiqueta.uf_destinatario }}</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div id="modal-duplicado" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="fecharModal()">&times;</span>
+            <h2>Pedido Duplicado</h2>
+            <p>As seguintes etiquetas para o pedido (<strong><span id="pedido-num-modal"></span></strong>) já foram processadas anteriormente:</p>
+            <div id="lista-historico"></div>
+            <hr>
+            
+            <div id="secao-interativa">
+                <button id="btn-chamar-separador" class="btn btn-print" onclick="chamarSeparador()">Chamar Separador</button>
+                
+                <div id="autorizacao-div" class="btn-container">
+                    <input type="password" id="codigo-input" placeholder="Código de autorização" required onkeypress="if(event.key==='Enter') verificarCodigo()">
+                    <button type="button" class="btn btn-print" onclick="verificarCodigo()">Autorizar</button>
+                </div>
+                
+                <div id="opcoes-reimpressao-modal" class="btn-container">
+                    <a href="{{ url_for('marcar_como_impresso', arquivo_id=arquivo.id) }}" class="btn btn-print">Imprimir Todas</a>
+                    <a href="{{ url_for('imprimir_parcial', arquivo_id=arquivo.id) }}" class="btn btn-warning">Imprimir Somente Não Repetidas</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('modal-duplicado');
+        const listaHistoricoDiv = document.getElementById('lista-historico');
+        const pedidoNumSpan = document.getElementById('pedido-num-modal');
+        const autorizacaoDiv = document.getElementById('autorizacao-div');
+        const opcoesReimpressaoDiv = document.getElementById('opcoes-reimpressao-modal');
+        const btnChamarSeparador = document.getElementById('btn-chamar-separador');
+        const codigoInput = document.getElementById('codigo-input');
+
+        async function abrirModalDuplicado(pedidoNum, arquivoIdAtual) {
+            pedidoNumSpan.textContent = pedidoNum;
+            listaHistoricoDiv.innerHTML = "<p>A carregar histórico...</p>";
+            // Reset o estado do modal para o inicial
+            autorizacaoDiv.style.display = 'none';
+            opcoesReimpressaoDiv.style.display = 'none';
+            btnChamarSeparador.style.display = 'inline-block';
+            codigoInput.value = '';
+
+            modal.style.display = 'block';
+
+            try {
+                const response = await fetch(`/historico-pedido/${pedidoNum}/${arquivoIdAtual}`);
+                const data = await response.json();
+                if (data.length > 0) {
+                    let html = '<ul>';
+                    data.forEach(item => {
+                        let dotClass = item.status === 'novo' ? 'green' : 'red';
+                        let dotTitle = item.status === 'novo' ? 'Aguardando Impressão' : 'Já Impresso';
+                        html += `<li><span class="status-dot ${dotClass}" title="${dotTitle}"></span>Etiqueta Vol. ${item.volume_atual}/${item.volume_total} (Produto: ${item.ref_numero})`;
+                    });
+                    html += '</ul>';
+                    listaHistoricoDiv.innerHTML = html;
+                } else {
+                    listaHistoricoDiv.innerHTML = "<p>Nenhum outro ficheiro encontrado para este pedido.</p>";
+                }
+            } catch (error) {
+                listaHistoricoDiv.innerHTML = "<p>Erro ao carregar o histórico.</p>";
+                console.error("Erro no fetch:", error);
+            }
+        }
+
+        function fecharModal() { modal.style.display = 'none'; }
+        
+        function chamarSeparador() {
+            btnChamarSeparador.style.display = 'none';
+            autorizacaoDiv.style.display = 'flex';
+        }
+
+        async function verificarCodigo() {
+            const codigo = codigoInput.value;
+            const formData = new FormData();
+            formData.append('codigo', codigo);
+
+            try {
+                const response = await fetch("{{ url_for('autorizar_reimpressao') }}", {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Se o código for correto, esconde a autorização e mostra os botões de impressão
+                    autorizacaoDiv.style.display = 'none';
+                    opcoesReimpressaoDiv.style.display = 'block';
+                } else {
+                    alert(data.message || 'Código de autorização inválido!');
+                }
+            } catch (error) {
+                alert('Erro ao contactar o servidor para autorização.');
+                console.error('Erro na verificação do código:', error);
+            }
+        }
+
+        window.onclick = function(event) { if (event.target == modal) { fecharModal(); } }
+    </script>
+    <footer>
+        <div  class="footer-faixa">
+            <div">
+                <p>Notus Sistemas Térmicos Do Brasil © Todos os direitos reservados</p>
+            </div>
+            <div class="faixa-amarela">
+            </div>
+            <div class="faixa-verde">
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
+

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Histórico de Impressões</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <div  class="header-faixa">
+            <img src="{{ url_for('static', filename='logo-notus-branco.png') }}" alt="Logo">
+        </div>
+    </header>
+    <div class="container">
+        <h1>Pedidos Identificados</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>N° Pedido</th>
+                    <th>Destinatário</th>
+                    <th>Data de Emissão</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for arquivo in arquivos %}
+                <tr onclick="window.location.href='{{ url_for('detalhes_arquivo', arquivo_id=arquivo.id) }}';">
+                    <td>
+                        {% if arquivo.status == 'novo' %}
+                            <span class="status-dot green" title="Pronto para imprimir"></span>
+                        {% elif arquivo.status == 'duplicado' %}  <span class="status-dot yellow" title="Pedido duplicado"></span>
+                        {% else %}
+                            <span class="status-dot red" title="Já impresso"></span>
+                        {% endif %}
+                    </td>
+                    <td>{{ arquivo.pedido }}</td>
+                    <td>{{ arquivo.destinatario }}</td>
+                    <td>{{ arquivo.data_processamento }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">Nenhum arquivo processado ainda.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <footer>
+        <div  class="footer-faixa">
+            <div">
+                <p>Notus Sistemas Térmicos Do Brasil © Todos os direitos reservados</p>
+            </div>
+            <div class="faixa-amarela">
+            </div>
+            <div class="faixa-verde">
+            </div>
+        </div>
+    </footer>
+    <script>
+        // Pega o timestamp que o servidor Flask enviou quando a página foi carregada
+        const lastKnownTime = {{ last_update }};
+
+        // Função que verifica por atualizações
+        async function checkForUpdates() {
+            try {
+                const response = await fetch(`/check-update/${lastKnownTime}`);
+                const data = await response.json();
+
+                if (data.update_available) {
+                    console.log("Nova atualização detectada! Recarregando a página...");
+                    window.location.reload(); // Recarrega a página
+                }
+            } catch (error) {
+                console.error("Erro ao verificar por atualizações:", error);
+            }
+        }
+
+        setInterval(checkForUpdates, 3000);
+    </script>
+</body>
+</html>

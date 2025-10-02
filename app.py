@@ -1,0 +1,162 @@
+from flask import Flask, render_template, redirect, url_for, abort, jsonify, request
+import sqlite3
+import os
+from datetime import datetime, timezone, timedelta
+
+# --- CONFIGURAÇÕES ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "etiquetas.db")
+UPDATE_SIGNAL_FILE = os.path.join(BASE_DIR, "update_signal.txt")
+CODIGO_REIMPRESSAO = "VIP123"
+
+app = Flask(__name__)
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def get_last_update_time():
+    if os.path.exists(UPDATE_SIGNAL_FILE):
+        with open(UPDATE_SIGNAL_FILE, "r") as f:
+            try: return float(f.read())
+            except (ValueError, TypeError): return 0.0
+    return 0.0
+
+def converter_utc_para_local(data_utc_str):
+    """Converte data UTC do SQLite para horário local (Brasília UTC-3)"""
+    try:
+        # Parse da data UTC do SQLite
+        data_utc = datetime.strptime(data_utc_str, '%Y-%m-%d %H:%M:%S')
+        # Adiciona timezone UTC
+        data_utc = data_utc.replace(tzinfo=timezone.utc)
+        # Converte para horário de Brasília (UTC-3)
+        brasilia_tz = timezone(timedelta(hours=-3))
+        data_local = data_utc.astimezone(brasilia_tz)
+        # Retorna formatado
+        return data_local.strftime('%d/%m/%Y %H:%M:%S')
+    except Exception:
+        # Se houver erro, retorna a data original
+        return data_utc_str
+
+@app.route('/')
+def index():
+    conn = get_db_connection()
+    arquivos_raw = conn.execute("""
+        SELECT ap.id, ap.nome_arquivo, ap.data_processamento, ap.status,
+               (SELECT e.numero_pedido FROM etiquetas e WHERE e.arquivo_id = ap.id LIMIT 1) as pedido,
+               (SELECT e.nome_destinatario FROM etiquetas e WHERE e.arquivo_id = ap.id LIMIT 1) as destinatario
+        FROM arquivos_processados ap ORDER BY ap.id DESC
+    """).fetchall()
+    conn.close()
+    
+    # Converte as datas para horário local
+    arquivos = []
+    for arquivo in arquivos_raw:
+        arquivo_dict = dict(arquivo)
+        arquivo_dict['data_processamento'] = converter_utc_para_local(arquivo_dict['data_processamento'])
+        arquivos.append(arquivo_dict)
+    
+    last_update = get_last_update_time()
+    return render_template('index.html', arquivos=arquivos, last_update=last_update)
+
+@app.route('/check-update/<float:last_known_time>')
+def check_update(last_known_time):
+    current_update_time = get_last_update_time()
+    if current_update_time > last_known_time:
+        return jsonify({'update_available': True})
+    return jsonify({'update_available': False})
+
+@app.route('/historico-pedido/<pedido_num>/<int:arquivo_id_atual>')
+def historico_pedido(pedido_num, arquivo_id_atual):
+    conn = get_db_connection()
+    impressoes_anteriores = conn.execute("""
+        SELECT e.id, e.volume_atual, e.volume_total, e.ref_numero, ap.nome_arquivo, ap.status
+        FROM etiquetas e JOIN arquivos_processados ap ON e.arquivo_id = ap.id
+        WHERE e.numero_pedido = ? AND e.arquivo_id != ?
+        ORDER BY ap.id, e.volume_atual
+    """, (pedido_num, arquivo_id_atual)).fetchall()
+    conn.close()
+    return jsonify([dict(row) for row in impressoes_anteriores])
+
+# --- ROTA DE AUTORIZAÇÃO ATUALIZADA ---
+@app.route('/autorizar-reimpressao', methods=['POST'])
+def autorizar_reimpressao():
+    """Verifica o código e retorna uma resposta JSON."""
+    codigo_fornecido = request.form.get('codigo')
+    if codigo_fornecido == CODIGO_REIMPRESSAO:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'message': 'Código inválido!'})
+
+@app.route('/arquivo/<int:arquivo_id>')
+def detalhes_arquivo(arquivo_id):
+    conn = get_db_connection()
+    arquivo_raw = conn.execute("SELECT * FROM arquivos_processados WHERE id = ?", (arquivo_id,)).fetchone()
+    if arquivo_raw is None: abort(404)
+    etiquetas = conn.execute("SELECT * FROM etiquetas WHERE arquivo_id = ? ORDER BY volume_atual", (arquivo_id,)).fetchall()
+    conn.close()
+    
+    # Converte a data para horário local
+    arquivo = dict(arquivo_raw)
+    arquivo['data_processamento'] = converter_utc_para_local(arquivo['data_processamento'])
+    
+    return render_template('detalhes.html', arquivo=arquivo, etiquetas=etiquetas)
+
+@app.route('/marcar_impresso/<int:arquivo_id>')
+def marcar_como_impresso(arquivo_id):
+    conn = get_db_connection()
+    conn.execute("UPDATE arquivos_processados SET status = 'impresso' WHERE id = ?", (arquivo_id,))
+    conn.commit()
+    conn.close()
+    with open(UPDATE_SIGNAL_FILE, "w") as f:
+        f.write(str(datetime.now().timestamp()))
+    return redirect(url_for('imprimir_arquivo', arquivo_id=arquivo_id))
+
+@app.route('/imprimir/<int:arquivo_id>')
+def imprimir_arquivo(arquivo_id):
+    conn = get_db_connection()
+    etiquetas = conn.execute("SELECT html_content FROM etiquetas WHERE arquivo_id = ? ORDER BY volume_atual", (arquivo_id,)).fetchall()
+    conn.close()
+    if not etiquetas: abort(404)
+    conteudo_html_completo = "".join([etiqueta['html_content'] for etiqueta in etiquetas])
+    return render_template('imprimir.html', conteudo_html=conteudo_html_completo)
+
+@app.route('/imprimir-parcial/<int:arquivo_id>')
+def imprimir_parcial(arquivo_id):
+    conn = get_db_connection()
+    etiquetas_atuais = conn.execute("SELECT numero_pedido, volume_atual FROM etiquetas WHERE arquivo_id = ?", (arquivo_id,)).fetchall()
+    if not etiquetas_atuais: abort(404)
+    
+    pedido_num = etiquetas_atuais[0]['numero_pedido']
+    volumes_atuais = {etiqueta['volume_atual'] for etiqueta in etiquetas_atuais}
+
+    volumes_anteriores_rows = conn.execute("""
+        SELECT e.volume_atual FROM etiquetas e
+        JOIN arquivos_processados ap ON e.arquivo_id = ap.id
+        WHERE e.numero_pedido = ? AND e.arquivo_id != ?
+    """, (pedido_num, arquivo_id)).fetchall()
+    volumes_anteriores = {row['volume_atual'] for row in volumes_anteriores_rows}
+
+    volumes_nao_repetidos = sorted(list(volumes_atuais - volumes_anteriores))
+    
+    if not volumes_nao_repetidos:
+        return "Não foram encontradas etiquetas não repetidas para este ficheiro.", 200
+
+    placeholders = ','.join('?' for _ in volumes_nao_repetidos)
+    query_parcial = f"SELECT html_content FROM etiquetas WHERE arquivo_id = ? AND volume_atual IN ({placeholders}) ORDER BY volume_atual"
+    
+    etiquetas_para_imprimir = conn.execute(query_parcial, [arquivo_id] + volumes_nao_repetidos).fetchall()
+    
+    conn.execute("UPDATE arquivos_processados SET status = 'impresso' WHERE id = ?", (arquivo_id,))
+    conn.commit()
+    conn.close()
+    
+    with open(UPDATE_SIGNAL_FILE, "w") as f:
+        f.write(str(datetime.now().timestamp()))
+        
+    conteudo_html_parcial = "".join([etiqueta['html_content'] for etiqueta in etiquetas_para_imprimir])
+    return render_template('imprimir.html', conteudo_html=conteudo_html_parcial)
+
+if __name__ == '__main__':
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
