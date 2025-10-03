@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Detalhes do Pedido</title>
+    <link rel="icon" type="image/webp" href="{{ url_for('static', filename='icone-logosite-quadrado-mask1.webp') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
@@ -56,7 +57,7 @@
             <hr>
             
             <div id="secao-interativa">
-                <button id="btn-chamar-separador" class="btn btn-print" onclick="chamarSeparador()">Chamar Separador</button>
+                <button id="btn-chamar-conferente" class="btn btn-print" onclick="chamarConferente()">Chamar Conferente</button>
                 
                 <div id="autorizacao-div" class="btn-container">
                     <input type="password" id="codigo-input" placeholder="Código de autorização" required onkeypress="if(event.key==='Enter') verificarCodigo()">
@@ -77,22 +78,30 @@
         const pedidoNumSpan = document.getElementById('pedido-num-modal');
         const autorizacaoDiv = document.getElementById('autorizacao-div');
         const opcoesReimpressaoDiv = document.getElementById('opcoes-reimpressao-modal');
-        const btnChamarSeparador = document.getElementById('btn-chamar-separador');
+        const btnchamarConferente = document.getElementById('btn-chamar-conferente');
         const codigoInput = document.getElementById('codigo-input');
 
         async function abrirModalDuplicado(pedidoNum, arquivoIdAtual) {
+            console.log(`DEBUG: abrirModalDuplicado chamado com pedidoNum='${pedidoNum}', arquivoIdAtual=${arquivoIdAtual}`);
             pedidoNumSpan.textContent = pedidoNum;
             listaHistoricoDiv.innerHTML = "<p>A carregar histórico...</p>";
             // Reset o estado do modal para o inicial
             autorizacaoDiv.style.display = 'none';
             opcoesReimpressaoDiv.style.display = 'none';
-            btnChamarSeparador.style.display = 'inline-block';
+            btnchamarConferente.style.display = 'inline-block';
             codigoInput.value = '';
 
             modal.style.display = 'block';
 
             try {
-                const response = await fetch(`/historico-pedido/${pedidoNum}/${arquivoIdAtual}`);
+                const url = `/historico-pedido?pedido_num=${encodeURIComponent(pedidoNum)}&arquivo_id_atual=${arquivoIdAtual}&_t=${Date.now()}`;
+                console.log(`DEBUG: Fazendo fetch para URL: ${url}`);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
                 if (data.length > 0) {
                     let html = '<ul>';
@@ -107,15 +116,21 @@
                     listaHistoricoDiv.innerHTML = "<p>Nenhum outro ficheiro encontrado para este pedido.</p>";
                 }
             } catch (error) {
-                listaHistoricoDiv.innerHTML = "<p>Erro ao carregar o histórico.</p>";
                 console.error("Erro no fetch:", error);
+                if (error.message.includes('404')) {
+                    listaHistoricoDiv.innerHTML = "<p>Erro 404: Rota não encontrada. Verifique se o servidor foi reiniciado.</p>";
+                } else if (error.message.includes('SyntaxError')) {
+                    listaHistoricoDiv.innerHTML = "<p>Erro: Resposta do servidor não é JSON válido. Verifique os logs do servidor.</p>";
+                } else {
+                    listaHistoricoDiv.innerHTML = `<p>Erro ao carregar o histórico: ${error.message}</p>`;
+                }
             }
         }
 
         function fecharModal() { modal.style.display = 'none'; }
         
-        function chamarSeparador() {
-            btnChamarSeparador.style.display = 'none';
+        function chamarConferente() {
+            btnchamarConferente.style.display = 'none';
             autorizacaoDiv.style.display = 'flex';
         }
 
@@ -159,4 +174,3 @@
     </footer>
 </body>
 </html>
-

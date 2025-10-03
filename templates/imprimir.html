@@ -4,12 +4,59 @@
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>Impressão</title>
+    <link rel="icon" type="image/webp" href="{{ url_for('static', filename='icone-logosite-quadrado-mask1.webp') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script>
+        let impressaoIniciada = false;
+        let impressaoConcluida = false;
+        let redirecionamentoExecutado = false;
+
         // Esta função será chamada assim que a página carregar
         window.onload = function() {
             window.print(); // Abre a caixa de diálogo de impressão do navegador
         };
+
+        // Detecta quando a impressão é iniciada
+        window.addEventListener('beforeprint', function() {
+            impressaoIniciada = true;
+            console.log("Impressão iniciada");
+        });
+
+        // Detecta quando a impressão é cancelada ou concluída
+        window.addEventListener('afterprint', function() {
+            if (impressaoIniciada && !redirecionamentoExecutado) {
+                redirecionamentoExecutado = true;
+                console.log("Impressão concluída - redirecionando para index");
+                window.location.href = "{{ url_for('index') }}";
+            }
+        });
+
+        // Detecta quando a janela perde o foco (usuário clicou em cancelar)
+        window.addEventListener('blur', function() {
+            if (impressaoIniciada && !impressaoConcluida && !redirecionamentoExecutado) {
+                // Aguarda um pouco para ver se a impressão realmente foi cancelada
+                setTimeout(function() {
+                    if (!impressaoConcluida && !redirecionamentoExecutado) {
+                        redirecionamentoExecutado = true;
+                        console.log("Impressão cancelada - voltando para detalhes");
+                        // Volta para a página de detalhes
+                        const arquivoId = window.location.pathname.split('/').pop();
+                        window.location.href = "{{ url_for('detalhes_arquivo', arquivo_id=0) }}".replace('0', arquivoId);
+                    }
+                }, 1000);
+            }
+        });
+
+        // Fallback: se o usuário fechar a janela de impressão sem imprimir
+        // ou se os eventos não funcionarem, redireciona após 5 segundos
+        setTimeout(function() {
+            if (!redirecionamentoExecutado && window.location.pathname.includes('/imprimir/')) {
+                redirecionamentoExecutado = true;
+                console.log("Timeout - assumindo cancelamento, voltando para detalhes");
+                const arquivoId = window.location.pathname.split('/').pop();
+                window.location.href = "{{ url_for('detalhes_arquivo', arquivo_id=0) }}".replace('0', arquivoId);
+            }
+        }, 5000);
     </script>
 </head>
 <body class="print-page">

@@ -67,8 +67,18 @@ def check_update(last_known_time):
         return jsonify({'update_available': True})
     return jsonify({'update_available': False})
 
-@app.route('/historico-pedido/<pedido_num>/<int:arquivo_id_atual>')
-def historico_pedido(pedido_num, arquivo_id_atual):
+@app.route('/historico-pedido')
+def historico_pedido():
+    pedido_num = request.args.get('pedido_num')
+    arquivo_id_atual = request.args.get('arquivo_id_atual', type=int)
+    
+    print(f"DEBUG: historico_pedido chamado com pedido_num='{pedido_num}', arquivo_id_atual={arquivo_id_atual}")
+    print(f"DEBUG: Query args: {request.args}")
+    print(f"DEBUG: URL completa: {request.url}")
+    
+    if not pedido_num or arquivo_id_atual is None:
+        return jsonify({'error': 'Parâmetros inválidos'}), 400
+    
     conn = get_db_connection()
     impressoes_anteriores = conn.execute("""
         SELECT e.id, e.volume_atual, e.volume_total, e.ref_numero, ap.nome_arquivo, ap.status
@@ -77,6 +87,7 @@ def historico_pedido(pedido_num, arquivo_id_atual):
         ORDER BY ap.id, e.volume_atual
     """, (pedido_num, arquivo_id_atual)).fetchall()
     conn.close()
+    print(f"DEBUG: Encontradas {len(impressoes_anteriores)} impressões anteriores")
     return jsonify([dict(row) for row in impressoes_anteriores])
 
 # --- ROTA DE AUTORIZAÇÃO ATUALIZADA ---
@@ -159,4 +170,4 @@ def imprimir_parcial(arquivo_id):
     return render_template('imprimir.html', conteudo_html=conteudo_html_parcial)
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=True)
