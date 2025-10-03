@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "etiquetas.db")
 UPDATE_SIGNAL_FILE = os.path.join(BASE_DIR, "update_signal.txt")
-CODIGO_REIMPRESSAO = "VIP123"
+CODIGO_REIMPRESSAO = os.environ.get('CODIGO_REIMPRESSAO', 'VIP123')
 
 app = Flask(__name__)
 
@@ -37,7 +37,7 @@ def converter_utc_para_local(data_utc_str):
         return data_local.strftime('%d/%m/%Y %H:%M:%S')
     except Exception:
         # Se houver erro, retorna a data original
-        return data_utc_str
+            return data_utc_str
 
 @app.route('/')
 def index():
@@ -116,6 +116,10 @@ def detalhes_arquivo(arquivo_id):
 
 @app.route('/marcar_impresso/<int:arquivo_id>')
 def marcar_como_impresso(arquivo_id):
+    api_key = request.args.get('api_key')
+    if api_key != os.environ.get('SECRET_API_KEY', 'MINHA_CHAVE_SECRETA'):
+        abort(401)
+    
     conn = get_db_connection()
     conn.execute("UPDATE arquivos_processados SET status = 'impresso' WHERE id = ?", (arquivo_id,))
     conn.commit()
@@ -170,4 +174,6 @@ def imprimir_parcial(arquivo_id):
     return render_template('imprimir.html', conteudo_html=conteudo_html_parcial)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Adaptação para Render - porta dinâmica
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
