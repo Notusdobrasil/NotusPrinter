@@ -1,6 +1,10 @@
+import os
+import sys
+import webbrowser
+import threading
+import time
 from flask import Flask, render_template, redirect, url_for, abort, jsonify, request
 import sqlite3
-import os
 from datetime import datetime, timezone, timedelta
 
 # --- CONFIGURAÇÕES ---
@@ -38,6 +42,11 @@ def converter_utc_para_local(data_utc_str):
     except Exception:
         # Se houver erro, retorna a data original
         return data_utc_str
+
+def open_browser():
+    """Abre o navegador após um pequeno delay"""
+    time.sleep(1.5)
+    webbrowser.open('http://127.0.0.1:5000')
 
 @app.route('/')
 def index():
@@ -170,4 +179,18 @@ def imprimir_parcial(arquivo_id):
     return render_template('imprimir.html', conteudo_html=conteudo_html_parcial)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    print("=" * 50)
+    print("    NOTUS PRINTER - Sistema de Impressão")
+    print("=" * 50)
+    print("Iniciando servidor...")
+    print("A aplicação será aberta automaticamente no navegador.")
+    print("Para parar o servidor, pressione Ctrl+C")
+    print("=" * 50)
+    
+    # Inicia thread para abrir navegador
+    browser_thread = threading.Thread(target=open_browser)
+    browser_thread.daemon = True
+    browser_thread.start()
+    
+    # Inicia o servidor Flask
+    app.run(host='127.0.0.1', port=5000, debug=False)
