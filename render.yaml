@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: impressao-etiquetas
+    runtime: python3
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: FLASK_ENV
+        value: production
+    healthCheckPath: /check-update/0
+    autoDeploy: true
+    branch: main

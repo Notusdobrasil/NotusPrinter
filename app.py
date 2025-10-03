@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "etiquetas.db")
 UPDATE_SIGNAL_FILE = os.path.join(BASE_DIR, "update_signal.txt")
-CODIGO_REIMPRESSAO = os.environ.get('CODIGO_REIMPRESSAO', 'VIP123')
+CODIGO_REIMPRESSAO = os.environ.get('CODIGO_REIMPRESSAO', 'CONF1708')
 
 app = Flask(__name__)
 
@@ -174,6 +174,6 @@ def imprimir_parcial(arquivo_id):
     return render_template('imprimir.html', conteudo_html=conteudo_html_parcial)
 
 if __name__ == '__main__':
-    # Adaptação para Render - porta dinâmica
+    # Para desenvolvimento local
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
