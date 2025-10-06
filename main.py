@@ -73,7 +73,7 @@ def open_browser():
 def index():
     conn = get_db_connection()
     arquivos_raw = conn.execute("""
-        SELECT ap.id, ap.nome_arquivo, ap.data_processamento, ap.status,
+        SELECT ap.id, ap.nome_arquivo, ap.data_processamento, ap.status, ap.total_etiquetas,
                (SELECT e.numero_pedido FROM etiquetas e WHERE e.arquivo_id = ap.id LIMIT 1) as pedido,
                (SELECT e.nome_destinatario FROM etiquetas e WHERE e.arquivo_id = ap.id LIMIT 1) as destinatario
         FROM arquivos_processados ap ORDER BY ap.id DESC

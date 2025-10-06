@@ -20,6 +20,7 @@
                     <th>Status</th>
                     <th>N° Pedido</th>
                     <th>Destinatário</th>
+                    <th>Quantidade de Etiquetas</th>
                     <th>Data de Emissão</th>
                 </tr>
             </thead>
@@ -36,11 +37,12 @@
                     </td>
                     <td>{{ arquivo.pedido }}</td>
                     <td>{{ arquivo.destinatario }}</td>
+                    <td>{{ arquivo.total_etiquetas }}</td>
                     <td>{{ arquivo.data_processamento }}</td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4">Nenhum arquivo processado ainda.</td>
+                    <td colspan="5">Nenhum arquivo processado ainda.</td>
                 </tr>
                 {% endfor %}
             </tbody>

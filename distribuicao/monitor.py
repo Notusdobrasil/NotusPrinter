@@ -4,6 +4,7 @@ import os
 import sqlite3
 import traceback
 import getpass
+import re
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from bs4 import BeautifulSoup
@@ -53,14 +54,13 @@ def processar_arquivo_etiqueta(caminho_do_arquivo):
         if pedido_tag_verificacao:
             numero_pedido_verificacao = pedido_tag_verificacao.strip().split(':')[1].strip()
 
-        # 2. Conecta ao banco e verifica o status dos pedidos existentes
+        # 2. NOVA LÓGICA DE VERIFICAÇÃO INTELIGENTE
         conn = sqlite3.connect(DB_FILE)
         cur = conn.cursor()
         
         status_final = 'novo'
         if numero_pedido_verificacao != "N/A":
-            # --- LÓGICA DE VERIFICAÇÃO ATUALIZADA ---
-            # Verifica se já existe um ficheiro para este pedido com status 'duplicado' (amarelo)
+            # Primeiro: verifica se já existe um ficheiro para este pedido com status 'duplicado' (laranja)
             cur.execute("""
                 SELECT ap.id FROM arquivos_processados ap
                 JOIN etiquetas e ON ap.id = e.arquivo_id
@@ -71,22 +71,64 @@ def processar_arquivo_etiqueta(caminho_do_arquivo):
 
             if duplicado_ja_existe:
                 print(f"ALERTA: Já existe uma reimpressão pendente para o pedido '{numero_pedido_verificacao}'. O ficheiro {os.path.basename(caminho_do_arquivo)} será ignorado.")
-                # Dispara a notificação no sistema operativo
                 notification.notify(
                     title='Impressão Duplicada Ignorada',
                     message=f'Já existe uma reimpressão pendente para o pedido {numero_pedido_verificacao}. O novo ficheiro foi ignorado.',
                     app_name='Monitor de Impressão',
-                    timeout=10 # A notificação desaparecerá após 10 segundos
+                    timeout=10
                 )
                 conn.close()
-                return # Interrompe o processamento deste ficheiro
+                return
 
-            # Se não houver duplicado pendente, verifica se o pedido já foi processado alguma vez
+            # Segundo: verifica se o pedido já foi processado alguma vez
             cur.execute("SELECT id FROM etiquetas WHERE numero_pedido = ? LIMIT 1", (numero_pedido_verificacao,))
             pedido_existente = cur.fetchone()
+            
             if pedido_existente:
-                status_final = 'duplicado'
-                print(f"AVISO: O pedido '{numero_pedido_verificacao}' já existe no banco. Marcando como duplicado.")
+                # Terceiro: se pedido existe, compara etiquetas individuais
+                print(f"Pedido '{numero_pedido_verificacao}' já existe. Verificando etiquetas individuais...")
+                
+                # Extrai dados das etiquetas atuais para comparação
+                etiquetas_atuais = []
+                for etiqueta_html in etiquetas_html:
+                    try:
+                        ref_numero = etiqueta_html.find('b').get_text(strip=True)
+                        volume_tag = etiqueta_html.find(string=lambda t: "Vol.:" in t)
+                        volume_atual = 0
+                        if volume_tag:
+                            volumes = volume_tag.strip().split(':')[1].strip().split('/')
+                            volume_atual = int(volumes[0])
+                        
+                        # Cria uma chave única para cada etiqueta (ref_numero + volume)
+                        chave_etiqueta = f"{ref_numero}_{volume_atual}"
+                        etiquetas_atuais.append(chave_etiqueta)
+                    except Exception:
+                        continue
+                
+                # Busca etiquetas existentes para este pedido
+                cur.execute("""
+                    SELECT ref_numero, volume_atual FROM etiquetas 
+                    WHERE numero_pedido = ? 
+                    ORDER BY volume_atual
+                """, (numero_pedido_verificacao,))
+                etiquetas_existentes = cur.fetchall()
+                
+                # Cria chaves para etiquetas existentes
+                chaves_existentes = [f"{row[0]}_{row[1]}" for row in etiquetas_existentes]
+                
+                # Verifica se há sobreposição entre etiquetas atuais e existentes
+                etiquetas_repetidas = set(etiquetas_atuais) & set(chaves_existentes)
+                
+                if etiquetas_repetidas:
+                    status_final = 'duplicado'
+                    print(f"AVISO: Encontradas {len(etiquetas_repetidas)} etiquetas repetidas para o pedido '{numero_pedido_verificacao}'. Status: DUPLICADO (laranja)")
+                    print(f"Etiquetas repetidas: {list(etiquetas_repetidas)}")
+                else:
+                    status_final = 'novo'
+                    print(f"INFO: Pedido '{numero_pedido_verificacao}' existe, mas todas as etiquetas são diferentes. Status: NOVO (verde)")
+                    print(f"Etiquetas novas: {etiquetas_atuais}")
+            else:
+                print(f"INFO: Pedido '{numero_pedido_verificacao}' é completamente novo. Status: NOVO (verde)")
         
         # O resto da lógica para inserir o novo ficheiro continua a mesma...
         nome_arquivo = os.path.basename(caminho_do_arquivo)
@@ -96,8 +138,19 @@ def processar_arquivo_etiqueta(caminho_do_arquivo):
         cur.execute(sql_arquivo, (nome_arquivo, caminho_do_arquivo, total_etiquetas, status_final))
         arquivo_id = cur.lastrowid
 
-        for etiqueta_html in etiquetas_html:
-            html_da_etiqueta = str(etiqueta_html)
+        # Lê o arquivo novamente para extrair o HTML original de cada etiqueta
+        with open(caminho_do_arquivo, 'r', encoding='utf-8') as f:
+            html_content_original = f.read()
+        
+        # Extrai o HTML original de cada etiqueta usando regex para preservar exatamente como está
+        etiquetas_originais = re.findall(r'<div class="etiqueta"[^>]*>.*?</div>', html_content_original, re.DOTALL)
+        
+        for i, etiqueta_html in enumerate(etiquetas_html):
+            # Usa o HTML original se disponível, senão usa o processado pelo BeautifulSoup
+            if i < len(etiquetas_originais):
+                html_da_etiqueta = etiquetas_originais[i]
+            else:
+                html_da_etiqueta = str(etiqueta_html)
             # ... (a sua lógica de extração robusta continua aqui) ...
             ref_numero, numero_pedido, data_pedido, nome_destinatario = "N/A", "N/A", "N/A", "N/A"
             endereco_completo, cidade_destinatario, uf_destinatario = "N/A", "N/A", "N/A"
