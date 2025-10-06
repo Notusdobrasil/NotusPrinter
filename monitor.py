@@ -7,15 +7,13 @@ import getpass
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from bs4 import BeautifulSoup
-from plyer import notification # <-- Importar a biblioteca de notificação
+from plyer import notification
 
-# --- CONFIGURAções ---
 def obter_diretorio_monitorado():
     """Obtém o diretório de temp do usuário atual automaticamente"""
     usuario_atual = getpass.getuser()
     diretorio_temp = f"C:/Users/{usuario_atual}/AppData/Local/Temp/"
     
-    # Verifica se o diretório existe
     if not os.path.exists(diretorio_temp):
         print(f"AVISO: Diretório {diretorio_temp} não encontrado. Tentando diretório alternativo...")
         # Fallback para o diretório temp padrão do sistema
@@ -174,4 +172,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
-

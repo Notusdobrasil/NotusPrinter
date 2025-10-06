@@ -7,6 +7,10 @@ from flask import Flask, render_template, redirect, url_for, abort, jsonify, req
 import sqlite3
 from datetime import datetime, timezone, timedelta
 
+# Importar o monitor
+from monitor import DIRETORIO_MONITORADO, MeuHandler
+from watchdog.observers import Observer
+
 # --- CONFIGURAÇÕES ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "etiquetas.db")
@@ -42,6 +46,23 @@ def converter_utc_para_local(data_utc_str):
     except Exception:
         # Se houver erro, retorna a data original
         return data_utc_str
+
+def start_file_monitor():
+    """Inicia o monitor de arquivos em uma thread separada"""
+    if DIRETORIO_MONITORADO is None:
+        print("ERRO: Não foi possível determinar o diretório para monitoramento.")
+        return None
+    
+    try:
+        event_handler = MeuHandler()
+        observer = Observer()
+        observer.schedule(event_handler, DIRETORIO_MONITORADO, recursive=False)
+        print(f"Monitorando o diretório: {DIRETORIO_MONITORADO}")
+        observer.start()
+        return observer
+    except Exception as e:
+        print(f"ERRO ao iniciar monitor: {e}")
+        return None
 
 def open_browser():
     """Abre o navegador após um pequeno delay"""
@@ -187,10 +208,20 @@ if __name__ == '__main__':
     print("Para parar o servidor, pressione Ctrl+C")
     print("=" * 50)
     
+    # Inicia o monitor de arquivos
+    monitor_observer = start_file_monitor()
+    
     # Inicia thread para abrir navegador
     browser_thread = threading.Thread(target=open_browser)
     browser_thread.daemon = True
     browser_thread.start()
     
-    # Inicia o servidor Flask
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    try:
+        # Inicia o servidor Flask
+        app.run(host='127.0.0.1', port=5000, debug=False)
+    except KeyboardInterrupt:
+        print("\nParando servidor...")
+        if monitor_observer:
+            monitor_observer.stop()
+            monitor_observer.join()
+        print("Servidor parado.")
