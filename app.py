@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "etiquetas.db")
 UPDATE_SIGNAL_FILE = os.path.join(BASE_DIR, "update_signal.txt")
-CODIGO_REIMPRESSAO = "VIP123"
+CODIGO_REIMPRESSAO = "150807"
 
 app = Flask(__name__)
 

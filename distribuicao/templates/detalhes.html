@@ -60,7 +60,15 @@
                 <button id="btn-chamar-conferente" class="btn btn-print" onclick="chamarConferente()">Chamar Conferente</button>
                 
                 <div id="autorizacao-div" class="btn-container">
-                    <input type="password" id="codigo-input" placeholder="Código de autorização" required onkeypress="if(event.key==='Enter') verificarCodigo()">
+                    <!-- Campo falso para confundir o navegador -->
+                    <input type="password" style="display: none;" autocomplete="username">
+                    <input type="password" id="codigo-input" placeholder="Código de autorização" required 
+                           autocomplete="off" 
+                           autocomplete="new-password" 
+                           data-form-type="other"
+                           onkeypress="if(event.key==='Enter') verificarCodigo()"
+                           onblur="this.value=''"
+                           style="background-color: white !important;">
                     <button type="button" class="btn btn-print" onclick="verificarCodigo()">Autorizar</button>
                 </div>
                 
@@ -147,13 +155,19 @@
                 const data = await response.json();
 
                 if (data.success) {
+                    // Limpa o campo imediatamente após sucesso
+                    codigoInput.value = '';
                     // Se o código for correto, esconde a autorização e mostra os botões de impressão
                     autorizacaoDiv.style.display = 'none';
                     opcoesReimpressaoDiv.style.display = 'block';
                 } else {
+                    // Limpa o campo também em caso de erro
+                    codigoInput.value = '';
                     alert(data.message || 'Código de autorização inválido!');
                 }
             } catch (error) {
+                // Limpa o campo em caso de erro de conexão
+                codigoInput.value = '';
                 alert('Erro ao contactar o servidor para autorização.');
                 console.error('Erro na verificação do código:', error);
             }
